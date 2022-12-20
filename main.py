@@ -18,7 +18,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import BOT_TOKEN, id_admin
-from keyboards import kb_user_main, kb_admin_main, ikb_user_catalog, kb_user_recipes, recipes_info
+from keyboards import kb_user_main, kb_admin_main, ikb_user_catalog, kb_user_recipes, recipes_info, contacts
 
 API_TOKEN = BOT_TOKEN
 id_admin = id_admin
@@ -137,22 +137,7 @@ async def mailing(message: types.Message):
 # Контактна інформація / Графік роботи
 @dp.message_handler(Text(equals="Контакти  📍"))
 async def mailing(message: types.Message):
-    await message.answer(text="<b>Італійські Смаколики!</b>\n"
-                              "<em>Контактна особа:</em> Якубович Кирило\n"
-                              "<em>Адреса:</em> вул. Філософська 86, оф. 208Б, Дніпро, Україна\n"
-                              "<em>Телефон:</em> <b>+380 (67) 643-30-30 - Гаряча лінія</b>\n"
-                              "<em>Телефон:</em> <b>+380 (96) 896-93-98 - Доставка по місту Дніпро</b>\n"
-                              "<em>Email:</em> store1.bonta@gmail.com\n"
-                              "<em>Сайт компанії:</em> <b>bonta.com.ua/ua</b>\n"
-                              "\n"
-                              "<b>Графік роботи:</b>\n"
-                              "09:00 - 17:00 Понеділок\n"
-                              "09:00 - 17:00 Вівторок\n"
-                              "09:00 - 17:00 Середа\n"
-                              "09:00 - 17:00 Четвер\n"
-                              "09:00 - 17:00 Пʼятниця\n"
-                              "10:00 - 14:00 Субота\n"
-                              "Неділя - Вихідний",
+    await message.answer(text=contacts,
                          parse_mode="HTML",
                          reply_markup=kb_user_main)
 
