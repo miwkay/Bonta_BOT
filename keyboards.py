@@ -8,6 +8,8 @@ main_menu = "Головне меню"
 
 # admin menu
 mailing = "Розсилка 📨"
+who_came = "Хто заходив 🕺"
+user_menu = "Меню покупця 👤"
 
 # user menu
 catalog = "Каталог товарів  🗂"
@@ -28,7 +30,9 @@ kb_main_back.add(main_menu).add(back)
 # main admin menu
 kb_admin_main = ReplyKeyboardMarkup(resize_keyboard=True)
 mailing = KeyboardButton(mailing)
-kb_admin_main.add(main_menu).add(mailing)
+who_came = KeyboardButton(who_came)
+user_menu = KeyboardButton(user_menu)
+kb_admin_main.add(who_came, mailing).add(user_menu)
 
 # main user menu
 kb_user_main = ReplyKeyboardMarkup(resize_keyboard=True)

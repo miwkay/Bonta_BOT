@@ -33,10 +33,10 @@ async def on_startup(_):
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    hello = ["Привіт", "Ку", "Хай", "Хеллоу"]
+    hello = ["Привіт", "Hello", "Hi", "Ciao", "Chin-Chin", "Ehi"]
     random_index = random.randint(0, len(hello) - 1)
     if message.from_user.id == id_admin:
-        await message.answer(f"{hello[random_index]} {message.from_user.first_name}!"
+        await message.answer(f"{hello[random_index]}, {message.from_user.first_name}!\n"
                              f"/start", reply_markup=kb_admin_main)
     else:
         con = sqlite3.connect('bonta_db.db')
@@ -53,11 +53,80 @@ async def send_welcome(message: types.Message):
                                                    datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         con.commit()
         cur.close()
-        await message.answer(f"{hello[random_index]} {message.from_user.full_name}!\n"
+        await message.answer(f"{hello[random_index]}, {message.from_user.full_name}!\n"
                              f"Раді бачити тебе в армії шанувальників смачної кухні.\n"
-                             f"bonta.com.ua", reply_markup=kb_user_main)
+                             f"bonta.com.ua\n"
+                             f"/start", reply_markup=kb_user_main)
 
 
+@dp.message_handler(Text(equals="Хто заходив 🕺"))
+async def delete_data_list(message: types.Message):
+    if message.from_user.id == id_admin:
+        with sqlite3.connect('bonta_db.db', check_same_thread=False) as db:
+            cur = db.cursor()
+            cur.execute("SELECT user_id, username, first_name, last_name, date FROM users")
+            data = cur.fetchall()
+            num = 0
+            for i in data:
+                await message.answer(text=f'<b>{i[4]}</b>\n'
+                                          f'user_id: {i[0]}\n'
+                                          f'username: @{i[1]}\n'
+                                          f'first_name: {i[2]}\n'
+                                          f'last_name: {i[3]}\n',
+                                     parse_mode="HTML", reply_markup=kb_admin_main)
+                num += 1
+            await message.answer(text=f'Всього в базі <b>{num}</b> людей!', parse_mode="HTML")
+    else:
+        await message.answer(text="Потрібні права адміністратора!", reply_markup=kb_user_main)
+
+
+# Розсилка
+class FormSupport(StatesGroup):
+    mailing = State()
+
+
+@dp.message_handler(Text(equals='Розсилка 📨'))
+async def mailing(message: types.Message):
+    await FormSupport.mailing.set()
+    await message.answer(text="<b>Текст розсилки:</b>",
+                         parse_mode="HTML",
+                         reply_markup=kb_admin_main)
+
+
+@dp.message_handler(state=FormSupport.mailing)
+async def process_name(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['mailing'] = message.text
+    with sqlite3.connect('bonta_db.db', check_same_thread=False) as db:
+        cur = db.cursor()
+        cur.execute("SELECT user_id FROM users")
+        user_id = cur.fetchall()
+        num_y = 0
+        num_n = 0
+    for i in user_id:
+        try:
+            await bot.send_message(i[0], md.text(data['mailing']), disable_notification=True)
+            num_y += 1
+        except:
+            num_n += 1
+    await message.answer(md.text(f'<b>{num_y}</b> користувачів <b>ОТРИМАЛИ</b> ✅\n'
+                                 f'<b>{num_n}</b> користувачів <b>НЕ ОТРИМАЛИ</b> ⛔️\n'
+                                 f'\n'
+                                 f'<b>Повідомлення:</b>\n',
+                                 data['mailing']),
+                         parse_mode="HTML",
+                         reply_markup=kb_admin_main)
+    await state.finish()
+
+
+# Перехід в меню покупця з режиму адміністратора
+@dp.message_handler(Text(equals="Меню покупця 👤"))
+async def mailing(message: types.Message):
+    await message.answer(text="Меню покупця:",
+                         reply_markup=kb_user_main)
+
+
+# Каталог товарів
 @dp.message_handler(Text(equals="Каталог товарів  🗂"))
 async def mailing(message: types.Message):
     await message.answer(text="Каталог товарів <b>bonta.com.ua</b>:",
@@ -65,6 +134,7 @@ async def mailing(message: types.Message):
                          reply_markup=ikb_user_catalog)
 
 
+# Контактна інформація / Графік роботи
 @dp.message_handler(Text(equals="Контакти  📍"))
 async def mailing(message: types.Message):
     await message.answer(text="<b>Італійські Смаколики!</b>\n"
@@ -87,6 +157,7 @@ async def mailing(message: types.Message):
                          reply_markup=kb_user_main)
 
 
+# Рецепти
 @dp.message_handler(Text(equals="Рецепти  📚"))
 async def mailing(message: types.Message):
     await message.answer(text=recipes_info,
@@ -94,6 +165,7 @@ async def mailing(message: types.Message):
                          reply_markup=kb_user_recipes)
 
 
+# Інлайн кнопка під кожним смаколиком
 def kb(el):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     button = types.InlineKeyboardButton(f'Замовити за {str(el[2])}', url=el[1])
@@ -101,19 +173,69 @@ def kb(el):
     return keyboard
 
 
+# Парсінг / section = лінк на розділ для парсингу
+def get_pars(section):
+    r = requests.get(f"{section}")
+    soup = BeautifulSoup(r.text, 'lxml')
+    items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
+    data = []
+    for item in items:
+        name = item.find('a', class_='cs-goods-title').text
+        link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
+        price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
+        data.append([name, link, price])
+    return data
+
+
 @dp.callback_query_handler()
 async def cbd_sauces(callback: types.CallbackQuery):
     if callback.data == 'sauces':
-        r = requests.get("https://bonta.com.ua/ua/g108597487-sousy?product_items_per_page=48")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            # img = item.find('img', class_='cs-image-holder__image').get('src')
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
+        data = get_pars('https://bonta.com.ua/ua/g108597487-sousy?product_items_per_page=48')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'groceries_and_condiments':
+        data = get_pars('https://bonta.com.ua/ua/g108622037-bakaleya-pripravy')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'flour':
+        data = get_pars('https://bonta.com.ua/ua/g112060733-muka')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'olive_oil':
+        data = get_pars('https://bonta.com.ua/ua/g108693005-olivkovoe-maslo')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'canned_food':
+        data = get_pars('https://bonta.com.ua/ua/g108618569-konservy')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'olives':
+        data = get_pars('https://bonta.com.ua/ua/g112332508-olivki')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'sweet':
+        data = get_pars('https://bonta.com.ua/ua/g108618568-sladosti')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'novelty':
+        data = get_pars('https://bonta.com.ua/ua/g111149831-novinki')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'ready_sets':
+        data = get_pars('https://bonta.com.ua/ua/g112064021-gotovye-nabory')
+        for el in data:
+            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+
+    if callback.data == 'gift_sets':
+        data = get_pars('https://bonta.com.ua/ua/g112451341-podarochnye-nabory')
         for el in data:
             await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
 
@@ -137,135 +259,17 @@ async def cbd_sauces(callback: types.CallbackQuery):
             for el in data:
                 await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
 
-    if callback.data == 'groceries_and_condiments':
-        r = requests.get("https://bonta.com.ua/ua/g108622037-bakaleya-pripravy")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'flour':
-        r = requests.get("https://bonta.com.ua/ua/g112060733-muka")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'olive_oil':
-        r = requests.get("https://bonta.com.ua/ua/g108693005-olivkovoe-maslo")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'canned_food':
-        r = requests.get("https://bonta.com.ua/ua/g108618569-konservy")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'olives':
-        r = requests.get("https://bonta.com.ua/ua/g112332508-olivki")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'sweet':
-        r = requests.get("https://bonta.com.ua/ua/g108618568-sladosti")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'novelty':
-        r = requests.get("https://bonta.com.ua/ua/g111149831-novinki")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'ready_sets':
-        r = requests.get("https://bonta.com.ua/ua/g112064021-gotovye-nabory")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
-
-    if callback.data == 'gift_sets':
-        r = requests.get("https://bonta.com.ua/ua/g112451341-podarochnye-nabory")
-        soup = BeautifulSoup(r.text, 'lxml')
-        items = soup.findAll('li', class_='cs-product-gallery__item cs-online-edit js-productad')
-        data = []
-        for item in items:
-            name = item.find('a', class_='cs-goods-title').text
-            link = 'https://bonta.com.ua/' + item.find('a', class_='cs-goods-title').get('href')
-            price = item.find('span', class_='cs-goods-price__value cs-goods-price__value_type_current').text
-            data.append([name, link, price])
-        for el in data:
-            await callback.message.answer(text=f'{el[1]}', reply_markup=kb(el))
+    await callback.answer(text='Готово!')
 
 
 @dp.message_handler()
 async def echo(message: types.Message):
-    await message.answer("Я тебе не розумію..")
+    await message.answer("Вибач, я тебе не розумію..")
 
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
 
-
-# class FormSupport(StatesGroup):
-#     mailing = State()  # Розсилка
 #     question = State()  # Запитати
 
 # @dp.message_handler(Text(equals='Залишити повідомлення 📜'))
@@ -288,25 +292,4 @@ if __name__ == '__main__':
 #                                              data['mailing']),
 #                            parse_mode="HTML",
 #                            reply_markup=kb_user_main)
-#     await state.finish()
-
-
-# @dp.message_handler(Text(equals='Розсилка 📨'))
-# async def mailing(message: types.Message):
-#     await FormSupport.mailing.set()
-#     await message.answer(text="<b>Текст розсилки:</b>",
-#                          parse_mode="HTML",
-#                          reply_markup=kb_admin_main)
-#
-#
-# @dp.message_handler(state=FormSupport.mailing)
-# async def process_name(message: types.Message, state: FSMContext):
-#     async with state.proxy() as data:
-#         data['mailing'] = message.text
-#     await bot.send_message(id_admin, md.text(data['mailing']), disable_notification=True)
-#     num = 0
-#     await message.answer(md.text(f'<b>{num}</b> користувачів отримали наступне повідомлення:\n',
-#                                  data['mailing']),
-#                          parse_mode="HTML",
-#                          reply_markup=kb_admin_main)
 #     await state.finish()
